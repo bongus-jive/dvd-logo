@@ -16,8 +16,25 @@ local drawable = {
 }
 
 function init()
-  if not camera or not camera.screenSize or not interface or not interface.drawDrawable then
-    sb.logWarn("'dvd logo' requires StarExtensions - https://github.com/StarExtensions/StarExtensions/releases")
+  if interface then
+    if interface.drawDrawable then
+      drawDrawable = interface.drawDrawable
+    elseif interface.bindCanvas then
+      local canvas = interface.bindCanvas("pat_dvd", true)
+      drawDrawable = function(...)
+        canvas:clear()
+        canvas:drawDrawable(...)
+      end
+      getScreenSize = function() return canvas:size() end
+    end
+  end
+
+  if not getScreenSize and camera and camera.screenSize then
+    getScreenSize = camera.screenSize
+  end
+
+  if not drawDrawable or not getScreenSize then
+    sb.logWarn("'dvd logo' requires StarExtensions or OpenStarbound")
     script.setUpdateDelta(0)
     update = nil
     return
@@ -25,13 +42,13 @@ function init()
 
   imageSize = root.imageSize(drawable.image)
 
-  local screenSize = camera.screenSize()
+  local screenSize = getScreenSize()
   pos_X = math.random(0, screenSize[1])
   pos_Y = math.random(0, screenSize[2])
 end
 
 function update()
-  local screenSize = camera.screenSize()
+  local screenSize = getScreenSize()
   local max_X = math.max(0, screenSize[1] - imageSize[1])
   local max_Y = math.max(0, screenSize[2] - imageSize[2])
 
@@ -58,5 +75,5 @@ function update()
     drawable.color = randomColor()
   end
 
-  interface.drawDrawable(drawable, {pos_X, pos_Y}, 1)
+  drawDrawable(drawable, {pos_X, pos_Y}, 1)
 end
