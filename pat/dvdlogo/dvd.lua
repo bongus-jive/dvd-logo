@@ -1,79 +1,106 @@
-local pos_X = 0
-local pos_Y = 0
-local speed = 1
-local moving_down = math.random() > 0.5
-local moving_left = math.random() > 0.5
-local imageSize
+local Dvd = {}
 
-local function randomColor()
-  return string.format("#%06x", math.random(0x808080, 0xFFFFFF))
+function Dvd:init()
+  local img = "/pat/dvdlogo/dvd.png"
+  self.imgSize = root.imageSize(img)
+  self.drawable = { image = img, centered = false, fullbright = true }
+  self:randomizeColor()
+
+  local r = sb.makeRandomSource()
+  self.x = r:randf()
+  self.y = r:randf()
+  self.xDown = r:randb()
+  self.yDown = r:randb()
+
+  self:initExt()
 end
 
-local drawable = {
-  image = "/pat/dvdlogo/dvd.png",
-  color = randomColor(),
-  centered = false
-}
+function Dvd:update()
+  local rect = world.clientWindow()
+  local ePos = entity.position()
+  
+  local lr = self.lastRect or rect
+  self.lastRect = rect
+  for i = 1, 4 do
+    rect[i] = rect[i] + (lr[i] - rect[i]) * 0.6
+  end
 
-function init()
-  if interface then
-    if interface.drawDrawable then
-      drawDrawable = interface.drawDrawable
-    elseif interface.bindCanvas then
-      local canvas = interface.bindCanvas("pat_dvd", true)
-      drawDrawable = function(...)
-        canvas:clear()
-        canvas:drawDrawable(...)
-      end
-      getScreenSize = function() return canvas:size() end
+  local w, h = rect[3] - rect[1], rect[4] - rect[2]
+  self.drawable.scale = (w / self.imgSize[1] + h / self.imgSize[2]) / 2
+  local scale = self.drawable.scale / 8
+
+  self.x, self.xDown = self:move(self.x, self.xDown, 1, scale / w)
+  self.y, self.yDown = self:move(self.y, self.yDown, 1, scale / h)
+
+  local dx = rect[1] - ePos[1]
+  local dy = rect[2] - ePos[2]
+  local dw = w - (self.imgSize[1] * scale)
+  local dh = h - (self.imgSize[2] * scale)
+  
+  self.drawable.position = {dx + dw * self.x, dy + dh * self.y}
+  localAnimator.addDrawable(self.drawable, "Overlay+6769")
+end
+
+----------------------------------------- se/osb
+function Dvd:initExt()
+  if not interface then return end
+
+  local draw
+  local screen = camera and camera.screenSize or nil
+
+  if interface.drawDrawable then
+    draw = interface.drawDrawable
+  elseif interface.bindCanvas then
+    local c = interface.bindCanvas("pat_dvd", true)
+    screen = function() return c:size() end
+    draw = function(...)
+      c:clear()
+      c:drawDrawable(...)
     end
   end
 
-  if not getScreenSize and camera and camera.screenSize then
-    getScreenSize = camera.screenSize
-  end
+  if not draw or not screen then return end
 
-  if not drawDrawable or not getScreenSize then
-    sb.logWarn("'dvd logo' requires StarExtensions or OpenStarbound")
-    script.setUpdateDelta(0)
-    update = nil
-    return
-  end
+  self.update = self.updateExt
+  self.drawDrawable = draw
+  self.getScreenSize = screen
 
-  imageSize = root.imageSize(drawable.image)
-
-  local screenSize = getScreenSize()
-  pos_X = math.random(0, screenSize[1])
-  pos_Y = math.random(0, screenSize[2])
+  local size = screen()
+  self.x = self.x * size[1]
+  self.y = self.y * size[2]
 end
 
-function update()
-  local screenSize = getScreenSize()
-  local max_X = math.max(0, screenSize[1] - imageSize[1])
-  local max_Y = math.max(0, screenSize[2] - imageSize[2])
+function Dvd:updateExt()
+  local size = self.getScreenSize()
+  local mx = math.max(0, size[1] - self.imgSize[1])
+  local my = math.max(0, size[2] - self.imgSize[2])
 
-  pos_X = pos_X + (moving_left and -speed or speed)
-  pos_Y = pos_Y + (moving_down and -speed or speed)
+  self.x, self.xDown = self:move(self.x, self.xDown, mx, 1)
+  self.y, self.yDown = self:move(self.y, self.yDown, my, 1)
 
-  if pos_X <= 0 then
-    pos_X = 0
-    moving_left = false
-    drawable.color = randomColor()
-  elseif pos_X >= max_X then
-    pos_X = max_X
-    moving_left = true
-    drawable.color = randomColor()
-  end
-
-  if pos_Y <= 0 then
-    pos_Y = 0
-    moving_down = false
-    drawable.color = randomColor()
-  elseif pos_Y >= max_Y then
-    pos_Y = max_Y
-    moving_down = true
-    drawable.color = randomColor()
-  end
-
-  drawDrawable(drawable, {pos_X, pos_Y}, 1)
+  self.drawDrawable(self.drawable, {self.x, self.y}, 1)
 end
+
+-----------------------------------------
+function Dvd:move(n, down, max, speed)
+  n = n + (down and -speed or speed)
+
+  if n <= 0 then
+    self:randomizeColor()
+    return 0, false
+  elseif n >= max then
+    self:randomizeColor()
+    return max, true
+  end
+  
+  return n, down
+end
+
+function Dvd:randomizeColor()
+  self.drawable.color = string.format("#%06x", math.random(0x808080, 0xFFFFFF))
+end
+
+-----------------------------------------
+local _init, _update = init, update
+function init() _init() Dvd:init() end
+function update(dt) _update(dt) Dvd:update() end
